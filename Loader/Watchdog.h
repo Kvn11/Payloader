@@ -3,5 +3,5 @@
 
 class Watchdog {
 public:
-	BOOL SandboxTimeCheck();
+	BOOL DelayExecution_WFSO(FLOAT ftMinutes);
 };
