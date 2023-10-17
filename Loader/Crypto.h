@@ -3,5 +3,5 @@
 
 class Crypto {
 public:
-	VOID XorByOneKey(IN PBYTE pShellCode, IN SIZE_T sShellcodeSize, IN BYTE bKey);
+	VOID XorByOneKey(IN PBYTE pShellCode, IN SIZE_T sShellCodeSize, IN BYTE bKey);
 };
