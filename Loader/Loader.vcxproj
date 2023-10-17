@@ -127,11 +127,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Encryptor.h" />
+    <ClCompile Include="Crypto.cpp" />
+    <ClCompile Include="Crypto.h" />
     <ClCompile Include="Loader.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Resolver.cpp" />
     <ClCompile Include="Utils.cpp" />
+    <ClCompile Include="Watchdog.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Loader.h" />
