@@ -3,6 +3,7 @@
 #include <winternl.h>
 #include <Windows.h>
 #include "Resolver.h"
+#include <stdio.h>
 
 FARPROC Resolver::GetProcAddress(IN HMODULE hModule, IN LPCSTR lpApiName) {
 	PBYTE pBase = (PBYTE)hModule;
@@ -43,6 +44,8 @@ FARPROC Resolver::GetProcAddress(IN HMODULE hModule, IN LPCSTR lpApiName) {
 		PVOID pFunctionAddress = (PVOID)(pBase + FunctionAddressArray[FunctionOrdinalArray[i]]);
 
 		if (strcmp(lpApiName, pFunctionName) == 0) {
+
+			printf("[ %0.4d ] FOUND API -\t NAME: %s -\t ADDRESS: 0x%p -\t ORDINAL: %d\n", i, pFunctionName, pFunctionAddress, FunctionOrdinalArray[i]);
 
 			// Add functionality for forwarded functions:
 			if (((ULONG_PTR)pFunctionAddress >= (ULONG_PTR)pImgExportDir) &&
